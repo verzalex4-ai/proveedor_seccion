@@ -1,6 +1,7 @@
 <?php
 /**
- * Historial de Órdenes con Filtros
+ * Historial de Órdenes con Filtros CORREGIDOS
+ * ordenes/historial.php
  */
 
 require_once '../config.php';
@@ -10,10 +11,16 @@ $page_heading = 'Historial de Órdenes';
 
 $conexion = conectarDB();
 
-// Filtros
-$filtro_desde = isset($_GET['desde']) ? $_GET['desde'] : date('Y-m-01');
-$filtro_hasta = isset($_GET['hasta']) ? $_GET['hasta'] : date('Y-m-d');
-$filtro_proveedor = isset($_GET['proveedor']) ? intval($_GET['proveedor']) : 0;
+// Filtros con validación
+$filtro_desde = isset($_GET['desde']) && !empty($_GET['desde']) ? $_GET['desde'] : date('Y-m-01');
+$filtro_hasta = isset($_GET['hasta']) && !empty($_GET['hasta']) ? $_GET['hasta'] : date('Y-m-d');
+$filtro_proveedor = isset($_GET['proveedor']) && is_numeric($_GET['proveedor']) ? intval($_GET['proveedor']) : 0;
+
+// Validar que fecha_hasta no sea menor que fecha_desde
+if (strtotime($filtro_hasta) < strtotime($filtro_desde)) {
+    mostrarMensaje('La fecha final no puede ser anterior a la fecha inicial', 'warning');
+    $filtro_hasta = $filtro_desde;
+}
 
 // Construir consulta SQL con filtros
 $sql = "SELECT o.*, p.nombre as nombre_proveedor 
@@ -57,7 +64,6 @@ if ($resultado->num_rows > 0) {
 
 cerrarDB($conexion);
 
-// Incluir header
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -75,24 +81,31 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="table-container">
     <div class="table-header">
         <h2>🔍 Historial de Órdenes de Compra</h2>
+        <a href="crear.php" class="btn-success">➕ Nueva Orden</a>
     </div>
 
-    <form method="GET" class="filters-box">
+    <form method="GET" class="filters-box" id="formFiltros">
         <div class="filter-row">
             <div class="form-group">
-                <label>Desde</label>
-                <input type="date" name="desde" class="form-control" value="<?php echo $filtro_desde; ?>">
+                <label>Desde <span class="required">*</span></label>
+                <input type="date" name="desde" class="form-control" 
+                       value="<?php echo $filtro_desde; ?>" 
+                       max="<?php echo date('Y-m-d'); ?>"
+                       required>
             </div>
 
             <div class="form-group">
-                <label>Hasta</label>
-                <input type="date" name="hasta" class="form-control" value="<?php echo $filtro_hasta; ?>">
+                <label>Hasta <span class="required">*</span></label>
+                <input type="date" name="hasta" class="form-control" 
+                       value="<?php echo $filtro_hasta; ?>" 
+                       max="<?php echo date('Y-m-d'); ?>"
+                       required>
             </div>
 
             <div class="form-group">
                 <label>Proveedor</label>
                 <select name="proveedor" class="form-control">
-                    <option value="0">Todos</option>
+                    <option value="0">Todos los proveedores</option>
                     <?php while ($prov = $proveedores->fetch_assoc()): ?>
                         <option value="<?php echo $prov['id']; ?>" <?php echo ($filtro_proveedor == $prov['id']) ? 'selected' : ''; ?>>
                             <?php echo htmlspecialchars($prov['nombre']); ?>
@@ -134,10 +147,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?php echo formatearFecha($orden['fecha_entrega_estimada']); ?></td>
                         <td><?php echo formatearMoneda($orden['total']); ?></td>
                         <td>
-                            <?php
-                            $clase_badge = 'badge-' . strtolower($orden['estado']);
-                            ?>
-                            <span class="badge <?php echo $clase_badge; ?>"><?php echo $orden['estado']; ?></span>
+                            <span class="badge badge-<?php echo strtolower($orden['estado']); ?>">
+                                <?php echo $orden['estado']; ?>
+                            </span>
                         </td>
                     </tr>
                 <?php endwhile; ?>
@@ -145,9 +157,31 @@ require_once __DIR__ . '/../includes/header.php';
         </table>
     <?php else: ?>
         <div class="no-data">
-            <p>No hay órdenes en el rango de fechas seleccionado.</p>
+            <p>📭 No hay órdenes en el rango de fechas seleccionado.</p>
+            <p style="font-size: 0.875rem; color: #858796;">
+                Período: <?php echo formatearFecha($filtro_desde); ?> al <?php echo formatearFecha($filtro_hasta); ?>
+            </p>
         </div>
     <?php endif; ?>
 </div>
+
+<script>
+// Validar fechas antes de enviar
+document.getElementById('formFiltros').addEventListener('submit', function(e) {
+    const desde = new Date(document.querySelector('input[name="desde"]').value);
+    const hasta = new Date(document.querySelector('input[name="hasta"]').value);
+    
+    if (hasta < desde) {
+        e.preventDefault();
+        alert('⚠️ La fecha final no puede ser anterior a la fecha inicial');
+        return false;
+    }
+});
+
+// Actualizar límite de fecha "hasta" cuando cambia "desde"
+document.querySelector('input[name="desde"]').addEventListener('change', function() {
+    document.querySelector('input[name="hasta"]').min = this.value;
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
