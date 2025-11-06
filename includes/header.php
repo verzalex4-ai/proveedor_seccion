@@ -20,7 +20,7 @@ $base_path = ($current_dir == 'seccion_proveedor') ? '' : '../';
 <body>
 
 <header class="navbar">
-    <div class="logo">📦 Sistema de Compras v1</div>
+    <div class="logo">📦 Sección Proveedor</div>
     <div class="title"><?php echo $page_heading ?? 'Panel de Gestión'; ?></div>
 </header>
 

@@ -1,7 +1,7 @@
 <?php
 /**
- * Footer Global
- * Incluir al final de todas las páginas
+ * Footer Global - SIMPLIFICADO
+ * Sin JavaScript redundante de submenús
  */
 ?>
 
@@ -13,21 +13,6 @@
 </footer>
 
 <script>
-// Toggle de submenús del sidebar
-function toggleSubmenu(id, element) {
-    event.preventDefault();
-    const submenu = document.getElementById('submenu-' + id);
-    submenu.classList.toggle('show');
-    
-    if (submenu.classList.contains('show')) {
-        element.classList.remove('collapsed');
-        element.innerHTML = element.innerHTML.replace('▼', '▲');
-    } else {
-        element.classList.add('collapsed');
-        element.innerHTML = element.innerHTML.replace('▲', '▼');
-    }
-}
-
 // Auto-cerrar alertas después de 5 segundos
 document.addEventListener('DOMContentLoaded', function() {
     const alerts = document.querySelectorAll('.alert');

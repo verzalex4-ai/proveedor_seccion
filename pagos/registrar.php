@@ -1,6 +1,7 @@
 <?php
 /**
- * Registrar Pago
+ * Registrar Pago - CORREGIDO
+ * Solo permite pagos de órdenes RECEPCIONADAS
  */
 
 require_once '../config.php';
@@ -10,11 +11,12 @@ $page_heading = 'Registrar Pago';
 
 $conexion = conectarDB();
 
-// Obtener órdenes con saldo pendiente
+// CORRECCIÓN: Solo obtener órdenes RECEPCIONADAS con saldo pendiente
 $sql_ordenes = "SELECT 
                     o.id,
                     o.numero_orden,
                     o.total,
+                    o.fecha_emision,
                     p.nombre as nombre_proveedor,
                     COALESCE(SUM(pag.monto), 0) as pagado,
                     (o.total - COALESCE(SUM(pag.monto), 0)) as saldo_pendiente
@@ -36,6 +38,8 @@ if (isset($_GET['orden'])) {
                     o.id,
                     o.numero_orden,
                     o.total,
+                    o.fecha_emision,
+                    o.estado,
                     p.nombre as nombre_proveedor,
                     COALESCE(SUM(pag.monto), 0) as pagado,
                     (o.total - COALESCE(SUM(pag.monto), 0)) as saldo_pendiente
@@ -52,6 +56,15 @@ if (isset($_GET['orden'])) {
     
     if ($result->num_rows > 0) {
         $orden_seleccionada = $result->fetch_assoc();
+        
+        // Validar que la orden esté recepcionada
+        if ($orden_seleccionada['estado'] != 'Recibida') {
+            mostrarMensaje('⚠️ Solo se pueden registrar pagos de órdenes RECEPCIONADAS. Esta orden está en estado: ' . $orden_seleccionada['estado'], 'warning');
+            $orden_seleccionada = null;
+        } elseif ($orden_seleccionada['saldo_pendiente'] <= 0) {
+            mostrarMensaje('✅ Esta orden ya está completamente pagada', 'info');
+            $orden_seleccionada = null;
+        }
     }
     $stmt->close();
 }
@@ -59,7 +72,7 @@ if (isset($_GET['orden'])) {
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['id_orden']) || empty($_POST['id_orden'])) {
-        mostrarMensaje('Debe seleccionar una orden de compra', 'danger');
+        mostrarMensaje('⚠️ Debe seleccionar una orden de compra', 'danger');
     } else {
         $id_orden = intval($_POST['id_orden']);
         $fecha_pago = $_POST['fecha_pago'];
@@ -68,9 +81,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $numero_comprobante = limpiarDatos($_POST['numero_comprobante']);
         $observaciones = limpiarDatos($_POST['observaciones']);
         
-        if ($monto <= 0) {
-            mostrarMensaje('El monto debe ser mayor a cero', 'danger');
+        // Validaciones
+        $errores = [];
+        
+        // Validar que la orden existe y está recepcionada
+        $sql_check = "SELECT estado, total, 
+                      (SELECT COALESCE(SUM(monto), 0) FROM pagos WHERE id_orden = ?) as pagado
+                      FROM ordenes_compra WHERE id = ?";
+        $stmt_check = $conexion->prepare($sql_check);
+        $stmt_check->bind_param("ii", $id_orden, $id_orden);
+        $stmt_check->execute();
+        $orden_check = $stmt_check->get_result()->fetch_assoc();
+        $stmt_check->close();
+        
+        if (!$orden_check) {
+            $errores[] = 'La orden seleccionada no existe';
+        } elseif ($orden_check['estado'] != 'Recibida') {
+            $errores[] = 'Solo se pueden registrar pagos de órdenes RECEPCIONADAS';
         } else {
+            $saldo_disponible = $orden_check['total'] - $orden_check['pagado'];
+            
+            if ($monto <= 0) {
+                $errores[] = 'El monto debe ser mayor a cero';
+            } elseif ($monto > $saldo_disponible) {
+                $errores[] = 'El monto (' . formatearMoneda($monto) . ') excede el saldo pendiente (' . formatearMoneda($saldo_disponible) . ')';
+            }
+        }
+        
+        // Validar fecha de pago
+        if (strtotime($fecha_pago) > strtotime(date('Y-m-d'))) {
+            $errores[] = 'La fecha de pago no puede ser futura';
+        }
+        
+        if (count($errores) == 0) {
             $sql = "INSERT INTO pagos (id_orden, fecha_pago, monto, metodo_pago, numero_comprobante, observaciones) 
                     VALUES (?, ?, ?, ?, ?, ?)";
             
@@ -78,16 +121,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->bind_param("isdsss", $id_orden, $fecha_pago, $monto, $metodo_pago, $numero_comprobante, $observaciones);
             
             if ($stmt->execute()) {
-                mostrarMensaje('Pago registrado exitosamente', 'success');
+                mostrarMensaje('✅ Pago registrado exitosamente: ' . formatearMoneda($monto), 'success');
                 $stmt->close();
                 cerrarDB($conexion);
                 header('Location: pendientes.php');
                 exit();
             } else {
-                mostrarMensaje('Error al registrar el pago: ' . $conexion->error, 'danger');
+                mostrarMensaje('❌ Error al registrar el pago: ' . $conexion->error, 'danger');
             }
             
             $stmt->close();
+        } else {
+            $mensaje = '<strong>⚠️ No se pudo registrar el pago:</strong><ul style="margin: 10px 0 0 20px;">';
+            foreach ($errores as $error) {
+                $mensaje .= '<li>' . $error . '</li>';
+            }
+            $mensaje .= '</ul>';
+            mostrarMensaje($mensaje, 'danger');
         }
     }
 }
@@ -105,16 +155,26 @@ function actualizarInfo(select) {
         const pagado = parseFloat(option.dataset.pagado);
         const saldo = parseFloat(option.dataset.saldo);
         const proveedor = option.dataset.proveedor;
+        const fecha = option.dataset.fecha;
         
         document.getElementById('infoProveedor').textContent = proveedor;
-        document.getElementById('infoTotal').textContent = '$' + total.toFixed(2);
-        document.getElementById('infoPagado').textContent = '$' + pagado.toFixed(2);
-        document.getElementById('infoSaldo').textContent = '$' + saldo.toFixed(2);
+        document.getElementById('infoFecha').textContent = fecha;
+        document.getElementById('infoTotal').textContent = formatMoney(total);
+        document.getElementById('infoPagado').textContent = formatMoney(pagado);
+        document.getElementById('infoSaldo').textContent = formatMoney(saldo);
+        
+        // Actualizar máximo del input de monto
+        document.querySelector('input[name=\"monto\"]').max = saldo;
+        document.querySelector('input[name=\"monto\"]').placeholder = 'Máximo: $' + saldo.toFixed(2);
         
         infoBox.style.display = 'block';
     } else {
         infoBox.style.display = 'none';
     }
+}
+
+function formatMoney(value) {
+    return '$' + value.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
 }
 
 window.addEventListener('DOMContentLoaded', function() {
@@ -132,6 +192,9 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="form-container">
     <div class="form-header">
         <h2>💵 Registrar Pago</h2>
+        <p style="color: #858796; font-size: 0.875rem; margin: 5px 0 0 0;">
+            ⚠️ Solo se pueden pagar órdenes que hayan sido RECEPCIONADAS
+        </p>
     </div>
 
     <?php if ($ordenes && $ordenes->num_rows > 0): ?>
@@ -139,7 +202,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="form-group">
             <label>Seleccionar Orden de Compra <span class="required">*</span></label>
             <select name="id_orden" class="form-control" required onchange="actualizarInfo(this)">
-                <option value="">-- Seleccione una orden de compra --</option>
+                <option value="">-- Seleccione una orden recepcionada --</option>
                 <?php 
                 $ordenes->data_seek(0);
                 while ($orden = $ordenes->fetch_assoc()): 
@@ -149,20 +212,26 @@ require_once __DIR__ . '/../includes/header.php';
                             data-pagado="<?php echo $orden['pagado']; ?>"
                             data-saldo="<?php echo $orden['saldo_pendiente']; ?>"
                             data-proveedor="<?php echo htmlspecialchars($orden['nombre_proveedor']); ?>"
+                            data-fecha="<?php echo formatearFecha($orden['fecha_emision']); ?>"
                             <?php echo ($orden_seleccionada && $orden_seleccionada['id'] == $orden['id']) ? 'selected' : ''; ?>>
                         <?php echo htmlspecialchars($orden['numero_orden']); ?> - <?php echo htmlspecialchars($orden['nombre_proveedor']); ?> (Saldo: <?php echo formatearMoneda($orden['saldo_pendiente']); ?>)
                     </option>
                 <?php endwhile; ?>
             </select>
             <small style="color: #858796; font-size: 0.75rem; margin-top: 5px; display: block;">
-                Seleccione la orden a la cual desea registrar el pago
+                Solo aparecen órdenes RECEPCIONADAS con saldo pendiente
             </small>
         </div>
 
         <div class="info-box" id="infoOrden" style="display: <?php echo $orden_seleccionada ? 'block' : 'none'; ?>;">
+            <h4 style="color: #4e73df; margin: 0 0 10px 0;">📋 Información de la Orden</h4>
             <div class="info-row">
                 <span><strong>Proveedor:</strong></span>
                 <span id="infoProveedor"><?php echo $orden_seleccionada ? htmlspecialchars($orden_seleccionada['nombre_proveedor']) : ''; ?></span>
+            </div>
+            <div class="info-row">
+                <span><strong>Fecha de Emisión:</strong></span>
+                <span id="infoFecha"><?php echo $orden_seleccionada ? formatearFecha($orden_seleccionada['fecha_emision']) : ''; ?></span>
             </div>
             <div class="info-row">
                 <span><strong>Total de la Orden:</strong></span>
@@ -183,11 +252,25 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="form-row">
             <div class="form-group">
                 <label>Fecha de Pago <span class="required">*</span></label>
-                <input type="date" name="fecha_pago" class="form-control" value="<?php echo date('Y-m-d'); ?>" required>
+                <input type="date" name="fecha_pago" class="form-control" 
+                       value="<?php echo date('Y-m-d'); ?>" 
+                       max="<?php echo date('Y-m-d'); ?>"
+                       required>
+                <small style="color: #858796; font-size: 0.75rem; margin-top: 3px; display: block;">
+                    No puede ser fecha futura
+                </small>
             </div>
             <div class="form-group">
                 <label>Monto del Pago <span class="required">*</span></label>
-                <input type="number" name="monto" class="form-control" step="0.01" min="0.01" placeholder="0.00" required>
+                <input type="number" name="monto" class="form-control" 
+                       step="0.01" 
+                       min="0.01" 
+                       max="<?php echo $orden_seleccionada ? $orden_seleccionada['saldo_pendiente'] : ''; ?>"
+                       placeholder="0.00" 
+                       required>
+                <small style="color: #858796; font-size: 0.75rem; margin-top: 3px; display: block;">
+                    Máximo: saldo pendiente de la orden
+                </small>
             </div>
         </div>
 
@@ -204,13 +287,17 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="form-group">
                 <label>Número de Comprobante</label>
-                <input type="text" name="numero_comprobante" class="form-control" placeholder="Ej: 001-00123456">
+                <input type="text" name="numero_comprobante" class="form-control" 
+                       maxlength="100"
+                       placeholder="Ej: 001-00123456">
             </div>
         </div>
 
         <div class="form-group">
             <label>Observaciones</label>
-            <textarea name="observaciones" class="form-control" placeholder="Notas adicionales sobre el pago"></textarea>
+            <textarea name="observaciones" class="form-control" 
+                      maxlength="500"
+                      placeholder="Notas adicionales sobre el pago"></textarea>
         </div>
 
         <div class="form-actions">
@@ -222,14 +309,21 @@ require_once __DIR__ . '/../includes/header.php';
     <?php else: ?>
     <div class="alert alert-warning">
         <h3 style="color: #856404; margin: 0 0 15px 0;">⚠️ No hay órdenes disponibles para pagar</h3>
-        <p style="margin: 0 0 10px 0; font-size: 0.875rem; color: #856404;">Para poder registrar un pago necesitas:</p>
+        <p style="margin: 0 0 10px 0; font-size: 0.875rem; color: #856404;">
+            Para poder registrar un pago, la orden debe cumplir estas condiciones:
+        </p>
         <ol style="margin: 10px 0 15px 20px; font-size: 0.875rem; color: #856404;">
-            <li>Crear una orden de compra</li>
-            <li>Recepcionar la orden (marcarla como "Recibida")</li>
-            <li>Que la orden tenga saldo pendiente de pago</li>
+            <li><strong>Estar RECEPCIONADA</strong> (estado "Recibida")</li>
+            <li>Tener saldo pendiente de pago</li>
         </ol>
-        <a href="../ordenes/crear.php" class="btn-primary">➕ Crear Orden de Compra</a>
-        <a href="../ordenes/index.php" class="btn-info" style="margin-left: 10px;">📋 Ver Órdenes</a>
+        <p style="margin: 15px 0 0 0; font-size: 0.875rem; color: #856404;">
+            <strong>Flujo correcto:</strong> Crear Orden → Recepcionar → Pagar
+        </p>
+        <div style="margin-top: 20px;">
+            <a href="../ordenes/crear.php" class="btn-primary">➕ Crear Orden de Compra</a>
+            <a href="../ordenes/recepcion.php" class="btn-success" style="margin-left: 10px;">✅ Recepcionar Órdenes</a>
+            <a href="../ordenes/index.php" class="btn-info" style="margin-left: 10px;">📋 Ver Órdenes</a>
+        </div>
     </div>
     <?php endif; ?>
 </div>

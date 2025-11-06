@@ -1,7 +1,7 @@
 <?php
 /**
- * Sidebar Dinámico
- * Detecta automáticamente la página activa
+ * Sidebar Optimizado - Eliminando redundancias
+ * Solo enlaces a páginas de LISTADO
  */
 
 // Detectar módulo y página actual
@@ -17,12 +17,6 @@ function isActive($module, $page) {
     return '';
 }
 
-// Función para mostrar submenu abierto
-function isModuleActive($module) {
-    global $current_module;
-    return ($current_module == $module) ? 'show' : '';
-}
-
 // Calcular base path
 $base = ($current_module == 'seccion_proveedor') ? '' : '../';
 ?>
@@ -32,49 +26,57 @@ $base = ($current_module == 'seccion_proveedor') ? '' : '../';
     
     <!-- Inicio -->
     <a href="<?php echo $base; ?>index.php" class="sidebar-link" <?php echo isActive('seccion_proveedor', 'index'); ?>>
-        🏠 Inicio
+        🏠 Panel Principal
     </a>
     
     <h3 class="sidebar-heading">MÓDULOS</h3>
     
-    <!-- Gestión de Proveedores -->
-    <div class="sidebar-module">
-        <a href="#" class="sidebar-link collapsed" onclick="toggleSubmenu('proveedores', this)">
-            1. Gestión de Proveedores
-        </a>
-        <ul class="submenu <?php echo isModuleActive('proveedores'); ?>" id="submenu-proveedores">
-            <li><a href="<?php echo $base; ?>proveedores/index.php" <?php echo isActive('proveedores', 'index'); ?>>Listado de Proveedores</a></li>
-            <li><a href="<?php echo $base; ?>proveedores/agregar.php" <?php echo isActive('proveedores', 'agregar'); ?>>Agregar Proveedor</a></li>
-        </ul>
-    </div>
+    <!-- Proveedores -->
+    <a href="<?php echo $base; ?>proveedores/index.php" class="sidebar-link" <?php echo isActive('proveedores', 'index'); ?>>
+        📋 Proveedores
+    </a>
     
     <!-- Órdenes de Compra -->
-    <div class="sidebar-module">
-        <a href="#" class="sidebar-link collapsed" onclick="toggleSubmenu('ordenes', this)">
-            2. Órdenes de Compra
-        </a>
-        <ul class="submenu <?php echo isModuleActive('ordenes'); ?>" id="submenu-ordenes">
-            <li><a href="<?php echo $base; ?>ordenes/index.php" <?php echo isActive('ordenes', 'index'); ?>>Listado y Seguimiento</a></li>
-            <li><a href="<?php echo $base; ?>ordenes/crear.php" <?php echo isActive('ordenes', 'crear'); ?>>Crear Nueva OC</a></li>
-            <li><a href="<?php echo $base; ?>ordenes/historial.php" <?php echo isActive('ordenes', 'historial'); ?>>Historial de Órdenes</a></li>
-        </ul>
-    </div>
-
-    <!-- Control de Pagos -->
-    <div class="sidebar-module">
-        <a href="#" class="sidebar-link collapsed" onclick="toggleSubmenu('pagos', this)">
-            3. Control de Pagos
-        </a>
-        <ul class="submenu <?php echo isModuleActive('pagos'); ?>" id="submenu-pagos">
-            <li><a href="<?php echo $base; ?>pagos/pendientes.php" <?php echo isActive('pagos', 'pendientes'); ?>>Saldos Pendientes</a></li>
-            <li><a href="<?php echo $base; ?>pagos/registrar.php" <?php echo isActive('pagos', 'registrar'); ?>>Registrar Pago</a></li>
-            <li><a href="<?php echo $base; ?>pagos/condiciones.php" <?php echo isActive('pagos', 'condiciones'); ?>>Condiciones de Pago</a></li>
-            <li><a href="<?php echo $base; ?>pagos/reportes.php" <?php echo isActive('pagos', 'reportes'); ?>>Reportes Financieros</a></li>
-        </ul>
-    </div>
-
+    <a href="<?php echo $base; ?>ordenes/index.php" class="sidebar-link" <?php echo isActive('ordenes', 'index'); ?>>
+        📦 Órdenes de Compra
+    </a>
+    
+    <!-- Recepción de Material -->
+    <a href="<?php echo $base; ?>ordenes/recepcion.php" class="sidebar-link" <?php echo isActive('ordenes', 'recepcion'); ?>>
+        ✅ Recepción de Material
+    </a>
+    
+    <!-- Historial de Órdenes -->
+    <a href="<?php echo $base; ?>ordenes/historial.php" class="sidebar-link" <?php echo isActive('ordenes', 'historial'); ?>>
+        📚 Historial de Órdenes
+    </a>
+    
+    <h3 class="sidebar-heading">PAGOS</h3>
+    
+    <!-- Saldos Pendientes -->
+    <a href="<?php echo $base; ?>pagos/pendientes.php" class="sidebar-link" <?php echo isActive('pagos', 'pendientes'); ?>>
+        ⏰ Cuentas por Pagar
+    </a>
+    
+    <!-- Registrar Pago -->
+    <a href="<?php echo $base; ?>pagos/registrar.php" class="sidebar-link" <?php echo isActive('pagos', 'registrar'); ?>>
+        💵 Registrar Pago
+    </a>
+    
+    <!-- Condiciones Comerciales -->
+    <a href="<?php echo $base; ?>pagos/condiciones.php" class="sidebar-link" <?php echo isActive('pagos', 'condiciones'); ?>>
+        📋 Condiciones de Pago
+    </a>
+    
     <h3 class="sidebar-heading">REPORTES</h3>
+    
+    <!-- Reportes Financieros -->
+    <a href="<?php echo $base; ?>pagos/reportes.php" class="sidebar-link" <?php echo isActive('pagos', 'reportes'); ?>>
+        📊 Reportes Financieros
+    </a>
+    
+    <!-- Reportes Generales -->
     <a href="<?php echo $base; ?>reportes/index.php" class="sidebar-link" <?php echo isActive('reportes', 'index'); ?>>
-        📊 Reportes Generales
+        📈 Reportes Generales
     </a>
 </aside>
